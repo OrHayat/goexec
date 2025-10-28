@@ -7,3 +7,6 @@ type Result struct {
 	Err      error
 	ExitCode int // -1 if unknown
 }
+
+type Metadata struct {
+}

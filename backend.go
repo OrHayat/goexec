@@ -1,6 +1,11 @@
 package goexec
 
-import "context"
+import (
+	"bufio"
+	"context"
+)
+
+// Todo:split into 2 interfaces.... not all commands suppport stream
 
 // Backend defines the common interface for all execution backends
 type Backend interface {
@@ -8,5 +13,5 @@ type Backend interface {
 	RunCommand(ctx context.Context, cmd Command) Result
 
 	// RunStream executes a command and streams output chunks via callback
-	RunStream(ctx context.Context, cmd Command, delim byte, callback func(ctx context.Context, chunk string) error) error
+	RunStream(ctx context.Context, cmd Command, delim bufio.SplitFunc, callback func(ctx context.Context, chunk string) error) error
 }
