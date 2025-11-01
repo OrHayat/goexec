@@ -1,27 +1,60 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
-	"time"
+	"fmt"
+	"os/exec"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/orhayat/goexec"
 )
 
+var _ goexec.Backend = mockBackend{}
+
+type mockBackend struct{}
+
+// RunCommand implements goexec.Backend.
+func (m mockBackend) RunCommand(ctx context.Context, cmd goexec.Command) goexec.Result {
+	fmt.Printf("cmd=%q args=%q\n", cmd.Cmd, cmd.Args)
+	args := []string{"-c", cmd.Cmd}
+	args = append(args, cmd.Args...)
+	cm := exec.CommandContext(ctx, "bash", args...)
+	var stdout bytes.Buffer
+	var stder bytes.Buffer
+	cm.Stdout = &stdout
+	cm.Stderr = &stder
+	err := cm.Run()
+	if err != nil {
+		return goexec.Result{Err: err}
+	}
+	return goexec.Result{
+		Stdout: stdout.String(),
+		Stderr: stder.String(),
+	}
+}
+
+// RunStream implements goexec.Backend.
+func (m mockBackend) RunStream(ctx context.Context, cmd goexec.Command, delim bufio.SplitFunc, callback func(ctx context.Context, chunk string) error) error {
+	panic("unimplemented")
+}
+
 func main() {
 
-	r, err := goexec.NewSystemdRunner()
-	if err != nil {
-		panic(err)
+	r := goexec.NewExecutor(mockBackend{})
+
+	// res := r.RunW(context.TODO(), "powershell.exe", "-c", "ls") //, "-a") // "2>", 5, true, "/dev/null")
+	res := r.RunW(context.TODO(), "echo hello world > ./test.txt")
+
+	fmt.Printf("res: %#v\n", res)
+
+	// Handle the result as needed
+	if res.Err != nil {
+		fmt.Printf("error: %v\n", res.Err)
+		return
 	}
-	defer r.Close()
-
-	res := r.RunCommand(context.TODO(), goexec.Command{
-		Cmd: "lsblk",
-	})
-	spew.Dump(res)
-	time.Sleep(time.Minute)
-
+	fmt.Printf("stdout: %q\n", res.Stdout)
+	fmt.Printf("stderr: %q\n", res.Stderr)
 }
 
 // func main() {
