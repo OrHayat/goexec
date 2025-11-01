@@ -3,38 +3,50 @@ package goexec
 import (
 	"bufio"
 	"context"
-	"fmt"
+	"strings"
 )
 
 var _ Backend = BashBackend{}
 
 type BashBackend struct {
-	subprocessExecutor *SubprocessBackend
+	*commandsMutex
+}
+
+type BashBackendConfig struct {
+	HighSlots   uint // max concurrent high-priority commands
+	NormalSlots uint // max concurrent normal-priority commands
 }
 
 //todo:improve constructor
-func NewBashBackend() (BashBackend, error) {
-	subproces, err := NewSubprocessBackend(SubprocessBackendConfig{})
-	if err != nil {
-		return BashBackend{}, err
-	}
+func NewBashBackend(cfg BashBackendConfig) (BashBackend, error) {
+	mu := newCommandsMutex(cfg.HighSlots, cfg.NormalSlots)
 	return BashBackend{
-		subprocessExecutor: &subproces,
+		commandsMutex: mu,
 	}, nil
 }
 
 func (b BashBackend) RunCommand(ctx context.Context, cmd Command) Result {
-	if cmd.Cmd == "" {
-		return Result{Err: ErrEmptyCommand}
+	slot, err := b.commandsMutex.acquireSlot(ctx, cmd.HighPriority)
+	if err != nil {
+		return Result{Err: err}
 	}
-	cmd.Cmd = fmt.Sprintf("bash --noprofile --norc -c %s", cmd.Cmd)
-	return b.subprocessExecutor.runCommand(ctx, cmd)
+	defer b.commandsMutex.releaseSlot(slot)
+	preparedCmd := []string{cmd.Cmd}
+	preparedCmd = append(preparedCmd, cmd.Args...)
+
+	args := []string{"--noprofile", "--norc", "-c", strings.Join(preparedCmd, " ")}
+	return runSubprocessCommand(ctx, "bash", args...)
 }
 
 func (b BashBackend) RunStream(ctx context.Context, cmd Command, delim bufio.SplitFunc, callback func(ctx context.Context, chunk string) error) error {
-	if cmd.Cmd == "" {
-		return ErrEmptyCommand
+	slot, err := b.commandsMutex.acquireSlot(ctx, cmd.HighPriority)
+	if err != nil {
+		return err
 	}
-	cmd.Cmd = fmt.Sprintf("bash --noprofile --norc -c %s", cmd.Cmd)
-	return b.subprocessExecutor.runStream(ctx, cmd, delim, callback)
+	defer b.commandsMutex.releaseSlot(slot)
+	preparedCmd := []string{cmd.Cmd}
+	preparedCmd = append(preparedCmd, cmd.Args...)
+
+	args := []string{"--noprofile", "--norc", "-c", strings.Join(preparedCmd, " ")}
+	return runSubprocessStream(ctx, "bash", args, delim, callback)
 }

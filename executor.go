@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"strings"
 
 	"al.essio.dev/pkg/shellescape"
 )
@@ -38,6 +37,7 @@ func (e *Executor) RunW(ctx context.Context, cmd string, args ...any) Result {
 		}
 		argsStr[i] = argStr
 	}
+	fmt.Println("Args=", argsStr)
 	return e.runner.RunCommand(ctx, Command{Cmd: cmd, Args: argsStr})
 }
 
@@ -67,42 +67,11 @@ func (e *Executor) RunStream(ctx context.Context, cmd Command, delim bufio.Split
 	return e.runner.RunStream(ctx, cmd, delim, callback)
 }
 
-// formatArgs formats a slice of string arguments for shell execution,
-// quoting arguments that need it while preserving shell operators
-func formatArgs(args []string) string {
-	// Shell operators that should not be quoted
-	shellOperators := map[string]bool{
-		">":   true,
-		">>":  true,
-		"<":   true,
-		"2>":  true,
-		"2>>": true,
-		"&>":  true,
-		"&>>": true,
-		"|":   true,
-		"&&":  true,
-		"||":  true,
-		";":   true,
-	}
-
-	for i, arg := range args {
-		if shellOperators[arg] {
-			// Don't quote shell operators
-			args[i] = arg
-		} else {
-			// Quote everything else using proper shell escaping
-			args[i] = shellescape.Quote(arg)
-		}
-	}
-
-	return strings.Join(args, " ")
-}
-
 // convertToString converts various types to their string representation
 func (e *Executor) convertToString(val any) (string, error) {
 	switch v := val.(type) {
 	case string:
-		return v, nil
+		return shellescape.Quote(v), nil
 	case int:
 		return strconv.Itoa(v), nil
 	case int8:

@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strings"
 
 	"github.com/orhayat/goexec"
 )
@@ -17,8 +18,11 @@ type mockBackend struct{}
 // RunCommand implements goexec.Backend.
 func (m mockBackend) RunCommand(ctx context.Context, cmd goexec.Command) goexec.Result {
 	fmt.Printf("cmd=%q args=%q\n", cmd.Cmd, cmd.Args)
-	args := []string{"-c", cmd.Cmd}
-	args = append(args, cmd.Args...)
+	// args := []string{"-c", cmd.Cmd}
+	// args = append(args, cmd.Args...)
+	// cm := exec.CommandContext(ctx, "bash", args...)
+	script := strings.Join(append([]string{cmd.Cmd}, cmd.Args...), " ")
+	args := []string{"-c", script}
 	cm := exec.CommandContext(ctx, "bash", args...)
 	var stdout bytes.Buffer
 	var stder bytes.Buffer
@@ -28,6 +32,7 @@ func (m mockBackend) RunCommand(ctx context.Context, cmd goexec.Command) goexec.
 	if err != nil {
 		return goexec.Result{Err: err}
 	}
+	fmt.Println("ramming cmd done", cmd.Cmd, "args", cmd.Args)
 	return goexec.Result{
 		Stdout: stdout.String(),
 		Stderr: stder.String(),
@@ -38,13 +43,19 @@ func (m mockBackend) RunCommand(ctx context.Context, cmd goexec.Command) goexec.
 func (m mockBackend) RunStream(ctx context.Context, cmd goexec.Command, delim bufio.SplitFunc, callback func(ctx context.Context, chunk string) error) error {
 	panic("unimplemented")
 }
-
+func must[T any](v T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
 func main() {
 
-	r := goexec.NewExecutor(mockBackend{})
+	r := goexec.NewExecutor(must(goexec.NewBashBackend(goexec.BashBackendConfig{})))
 
 	// res := r.RunW(context.TODO(), "powershell.exe", "-c", "ls") //, "-a") // "2>", 5, true, "/dev/null")
-	res := r.RunW(context.TODO(), "echo hello world > ./test.txt")
+	res := r.RunW(context.TODO(), "echo", "hello world;echo deleted files")
+	// res := r.RunW(context.TODO(), "echo hello world > ./test.txt")
 
 	fmt.Printf("res: %#v\n", res)
 
@@ -55,6 +66,11 @@ func main() {
 	}
 	fmt.Printf("stdout: %q\n", res.Stdout)
 	fmt.Printf("stderr: %q\n", res.Stderr)
+	res = r.RunW(context.TODO(), "echo", "test")
+
+	fmt.Printf("stdout: %q\n", res.Stdout)
+	fmt.Printf("stderr: %q\n", res.Stderr)
+
 }
 
 // func main() {
