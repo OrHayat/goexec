@@ -9,7 +9,7 @@ import (
 var _ Backend = BashBackend{}
 
 type BashBackend struct {
-	*commandsMutex
+	*SubprocessBackend
 }
 
 type BashBackendConfig struct {
@@ -19,10 +19,12 @@ type BashBackendConfig struct {
 
 //todo:improve constructor
 func NewBashBackend(cfg BashBackendConfig) (BashBackend, error) {
-	mu := newCommandsMutex(cfg.HighSlots, cfg.NormalSlots)
-	return BashBackend{
-		commandsMutex: mu,
-	}, nil
+
+	SubprocessBackend, err := NewSubprocessBackend(SubprocessBackendConfig(cfg))
+	if err != nil {
+		return BashBackend{}, err
+	}
+	return BashBackend{SubprocessBackend: &SubprocessBackend}, nil
 }
 
 func (b BashBackend) RunCommand(ctx context.Context, cmd Command) Result {

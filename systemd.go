@@ -34,10 +34,18 @@ func cleanupWorkdirExceptLock(workdir, lockPath string) error {
 	return nil
 }
 
-func NewSystemdRunner() (runner SystemdRunner, err error) {
+type SystemdRunnnerConfig struct {
+	WorkDir   string
+	LowSlots  uint // max concurrent low-priority commands
+	HighSlots uint // max concurrent high-priority commands
+}
 
-	tmpDir := os.TempDir()
-	workdir := filepath.Join(tmpDir, defaultRunnerWorkdir)
+func NewSystemdRunner(cfg SystemdRunnnerConfig) (runner SystemdRunner, err error) {
+	workdir := cfg.WorkDir
+	if workdir == "" {
+		tmpDir := os.TempDir()
+		cfg.WorkDir = filepath.Join(tmpDir, defaultRunnerWorkdir)
+	}
 
 	//ensure workdir exists
 	err = os.MkdirAll(workdir, 0700)
