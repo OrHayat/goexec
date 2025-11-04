@@ -35,9 +35,9 @@ func cleanupWorkdirExceptLock(workdir, lockPath string) error {
 }
 
 type SystemdRunnnerConfig struct {
-	WorkDir   string
-	LowSlots  uint // max concurrent low-priority commands
-	HighSlots uint // max concurrent high-priority commands
+	WorkDir     string
+	NormalSlots uint // max concurrent normal-priority commands
+	HighSlots   uint // max concurrent high-priority commands
 }
 
 func NewSystemdRunner(cfg SystemdRunnnerConfig) (runner SystemdRunner, err error) {
@@ -52,7 +52,6 @@ func NewSystemdRunner(cfg SystemdRunnnerConfig) (runner SystemdRunner, err error
 	if err != nil {
 		return runner, err
 	}
-	fmt.Println("created workdir", workdir)
 
 	lockPath := filepath.Join(workdir, ".lock")
 
@@ -61,7 +60,6 @@ func NewSystemdRunner(cfg SystemdRunnnerConfig) (runner SystemdRunner, err error
 	if err != nil {
 		return runner, fmt.Errorf("open lock: %w", err)
 	}
-	fmt.Println("opened lockfile", lockf)
 
 	defer func() {
 		if err != nil {
@@ -72,7 +70,6 @@ func NewSystemdRunner(cfg SystemdRunnnerConfig) (runner SystemdRunner, err error
 	if err = syscall.Flock(int(lockf.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		return runner, fmt.Errorf("workdir already locked by another process")
 	}
-	fmt.Println("lockd lockfle")
 	defer func() {
 		if err != nil {
 			syscall.Flock(int(lockf.Fd()), syscall.LOCK_UN)
@@ -82,9 +79,11 @@ func NewSystemdRunner(cfg SystemdRunnnerConfig) (runner SystemdRunner, err error
 	if err = cleanupWorkdirExceptLock(workdir, lockPath); err != nil {
 		return runner, fmt.Errorf("cleanup failed: %w", err)
 	}
-	fmt.Println("cleaned workdir")
 
-	subProcess, err := NewSubprocessBackend(SubprocessBackendConfig{})
+	subProcess, err := NewSubprocessBackend(SubprocessBackendConfig{
+		HighSlots:   cfg.HighSlots,
+		NormalSlots: cfg.NormalSlots,
+	})
 	if err != nil {
 		return runner, err
 	}
@@ -127,12 +126,11 @@ func (s SystemdRunner) RunCommand(ctx context.Context, cmd Command) Result {
 	// script := fmt.Sprintf(`( %s ) >%s 2>%s; echo $? >%s`, cmd.Cmd, stdoutFile.Name(), stderrFile.Name(), statusFile.Name())
 	// quotedScript := strconv.Quote(script)
 
-	script := fmt.Sprintf(`( %s ) >%s 2>%s; echo $? >%s`, cmd.Cmd, stdoutFile.Name(), stderrFile.Name(), statusFile.Name())
-	// s.subprocessExecutor.
-	// cmd.Cmd = fmt.Sprintf("systemd-run  --wait --service-type=exec bash -c %s", script)
-	// cmd.Cmd = fmt.Sprintf("systemd-run --wait --service-type-exec bash -c %s", cmd.Cmd)
-	// script := cmd.Cmd
-	// Use exec.CommandContext with program + args (do not pass the whole command-line as one string).
+	codeToEexecSplitted := []string{cmd.Cmd}
+	codeToEexecSplitted = append(codeToEexecSplitted, cmd.Args...)
+	codeToEexec := strings.Join(codeToEexecSplitted, " ")
+	script := fmt.Sprintf(`( %s ) >%s 2>%s; echo $? >%s`, codeToEexec, stdoutFile.Name(), stderrFile.Name(), statusFile.Name())
+	//use systemd-run with script
 	execCmd := exec.CommandContext(ctx,
 		"systemd-run",
 		"--quiet",
@@ -149,11 +147,6 @@ func (s SystemdRunner) RunCommand(ctx context.Context, cmd Command) Result {
 		}
 	}
 
-	// cmd := exec.Command("systemd-run", "--quiet", "--wait", "--service-type=exec", "bash", "-c", script)
-	// res := s.subprocessExecutor.runCommand(ctx, cmd)
-	// if res.Err != nil {
-	// 	return res
-	// }
 	var res Result
 	stdout, err := os.ReadFile(stdoutFile.Name())
 	if err != nil {
@@ -210,27 +203,3 @@ func (s *SystemdRunner) Close() {
 func (s SystemdRunner) RunStream(ctx context.Context, cmd Command, delim bufio.SplitFunc, callback func(ctx context.Context, chunk string) error) error {
 	return fmt.Errorf("stream command processing is not supported for systemd-runner")
 }
-
-/*
-	outFile := "/tmp/out.log"
-	errFile := "/tmp/err.log"
-	statusFile := "/tmp/status.log"
-
-	cmdStr := `echo "start"; echo "oops" >&2; sleep 1; echo "done"`
-
-	// Whole block wrapped in subshell so redirection applies to all
-	script := fmt.Sprintf(`( %s ) >%s 2>%s; echo $? >%s`, cmdStr, outFile, errFile, statusFile)
-
-	cmd := exec.Command("systemd-run", "--quiet", "--wait", "--service-type=exec", "bash", "-c", script)
-
-	if err := cmd.Run(); err != nil {
-		fmt.Println("run err:", err)
-	}
-
-	dataOut, _ := os.ReadFile(outFile)
-	dataErr, _ := os.ReadFile(errFile)
-	status, _ := os.ReadFile(statusFile)
-
-	fmt.Printf("OUT:\n%s\nERR:\n%s\nSTATUS:\n%s\n", dataOut, dataErr, status)
-
-*/

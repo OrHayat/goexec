@@ -59,7 +59,6 @@ func runSubprocessCommand(ctx context.Context, command string, args ...string) R
 	} else {
 		exitCode = 0
 	}
-	fmt.Println("ran command result", cmd.String(), "err", err)
 	return Result{
 		Stdout:   string(out),
 		Stderr:   stderr.String(),

@@ -37,7 +37,6 @@ func (e *Executor) RunW(ctx context.Context, cmd string, args ...any) Result {
 		}
 		argsStr[i] = argStr
 	}
-	fmt.Println("Args=", argsStr)
 	return e.runner.RunCommand(ctx, Command{Cmd: cmd, Args: argsStr})
 }
 
